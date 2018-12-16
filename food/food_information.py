@@ -1,4 +1,4 @@
-import requests,random,time
+import requests,random,time,sqlite3,multiprocessing
 from bs4 import BeautifulSoup as bs
 
 
@@ -36,12 +36,20 @@ def get_content(sort,urin):     #获取某一分类的所有食物，以及食�
         out[i.text]=url+i.find('a').get('href')[1:]
     return out
 
-def get_ele(con,urin):      #获取某一食物的所有营养成分，对应数量以及单位，做出字典
+def get_ele(con,urin):      #获取某一食物的所有营养成分，对应数量以及单位，添加到数据库
+    con=con.replace('(','_')
+    con = con.replace(',', '_')
+    con = con.replace(')', '')
+    con = con.replace('[', '_')
+    con = con.replace(']', '')
+    try:
+        cursor.execute('create table %s(name char(40),val float,unit char(40))'%con)
+    except:
+        print('table %s exists!'%con)
     aa = requests.get(urin, headers={'user-agent': random.choice(allhead)})
     bb = bs(aa.content, 'lxml')
     cc = bb.find(class_='yingyang wkbx')
     dd=cc.find_all('tr')
-    out={}
     def v_u(str1):
         str1=str1.replace('(','')
         str1 = str1.replace(')', '')
@@ -51,13 +59,30 @@ def get_ele(con,urin):      #获取某一食物的所有营养成分，对应数
     for i in dd:
         te=i.text
         dat = te.split('\n')
-        out[dat[1]] = v_u(dat[2])
-        out[dat[3]] = v_u(dat[4])
-    return out
-
+        try:
+            cursor.execute("insert into %s (name,val,unit) values (\'%s\',%f,\'%s\')"%(con,dat[1],v_u(dat[2])[0],v_u(dat[2])[1]))
+            cursor.execute("insert into %s (name,val,unit) values (\'%s\',%f,\'%s\')" % (con, dat[3], v_u(dat[4])[0], v_u(dat[4])[1]))
+        except:
+            print(con,'!!!!!!!!wrong!!!!!!!!!!')
+    conn.commit()
+    print(con,'ok')
 
 
 if __name__=="__main__":
     all_sort=get_sort(url)
-    a1=get_content('谷类',all_sort['谷类'])
-    get_ele('小麦',a1['小麦'])
+    for i in all_sort:
+        print(i,all_sort[i])
+        connect=get_content(i,all_sort[i])
+        conn = sqlite3.connect(i+'.db')
+        cursor = conn.cursor()
+        # p = multiprocessing.Pool(processes=10)
+        # for j in connect:
+        #     res=p.apply_async(get_ele,args=(j,connect[j],))
+        # p.close()
+        # p.join()
+        for j in connect:
+            get_ele(j,connect[j])
+        cursor.close()
+        conn.commit()
+        conn.close()
+
